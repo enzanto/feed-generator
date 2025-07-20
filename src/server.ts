@@ -9,6 +9,7 @@ import { createDb, Database, migrateToLatest } from './db'
 import { FirehoseSubscription } from './subscription'
 import { AppContext, Config } from './config'
 import wellKnown from './well-known'
+import { getAllFollowers } from './util/followers'
 
 export class FeedGenerator {
   public app: express.Application
@@ -29,10 +30,16 @@ export class FeedGenerator {
     this.cfg = cfg
   }
 
-  static create(cfg: Config) {
+  static async create(cfg: Config) {
     const app = express()
     const db = createDb(cfg.sqliteLocation)
-    const firehose = new FirehoseSubscription(db, cfg.subscriptionEndpoint)
+	const targetDid = 'did:plc:o34vwiahrvcf2jdnu7onfbmp'
+	const allowedDids = await getAllFollowers(targetDid)
+	console.log(`Allowed DIDs count: ${allowedDids.size}`)  // assuming it's a Set
+	// const allowedDids = new Set([
+	//   'did:plc:dgp7zlpdkghki3ae5fotyupt', // your test DID
+	// ])
+    const firehose = new FirehoseSubscription(db, cfg.subscriptionEndpoint, allowedDids)
 
     const didCache = new MemoryCache()
     const didResolver = new DidResolver({

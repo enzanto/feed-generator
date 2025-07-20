@@ -3,8 +3,16 @@ import {
   isCommit,
 } from './lexicon/types/com/atproto/sync/subscribeRepos'
 import { FirehoseSubscriptionBase, getOpsByType } from './util/subscription'
+import { Database } from './db'
 
 export class FirehoseSubscription extends FirehoseSubscriptionBase {
+  private allowedDids: Set<string>
+
+  constructor(db: Database, subscriptionEndpoint: string, allowedDids: Set<string>) {
+    super(db, subscriptionEndpoint)
+    this.allowedDids = allowedDids
+  }
+
   async handleEvent(evt: RepoEvent) {
     if (!isCommit(evt)) return
 
@@ -20,10 +28,14 @@ export class FirehoseSubscription extends FirehoseSubscriptionBase {
     const postsToDelete = ops.posts.deletes.map((del) => del.uri)
     const postsToCreate = ops.posts.creates
       .filter((create) => {
+		const author = create.author
+        const text = create.record?.text?.toLowerCase?.() || ''
+        return this.allowedDids.has(author)
         // only alf-related posts
-        return create.record.text.toLowerCase().includes('alf')
+        // return create.record.text.toLowerCase().includes('alf')
       })
       .map((create) => {
+        console.log(`🟢 Including post from allowed DID: ${create.author}`)
         // map alf-related posts to a db row
         return {
           uri: create.uri,
@@ -39,6 +51,7 @@ export class FirehoseSubscription extends FirehoseSubscriptionBase {
         .execute()
     }
     if (postsToCreate.length > 0) {
+      console.log(`💾 Inserting ${postsToCreate.length} post(s):`, postsToCreate)
       await this.db
         .insertInto('post')
         .values(postsToCreate)
